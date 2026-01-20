@@ -1,6 +1,6 @@
 # Agentic Memory Framework
 
-A production-ready framework for managing agent memory that solves critical context engineering problems:
+A POC framework for managing agent memory that solves critical context engineering problems:
 - **Context Poisoning**: Incorrect/outdated information contaminating context
 - **Context Distraction**: Irrelevant information diluting useful context
 - **Context Confusion**: Ambiguous or conflicting information

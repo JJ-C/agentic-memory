@@ -1,8 +1,36 @@
 import sys
+import os
 sys.path.insert(0, '/Users/jchen65/dev/ai_playground/agentic_memory')
 
 from agentic_memory import AgenticMemory, MemoryType, MemoryScope
 import json
+
+# ============================================================================
+# CONFIGURATION: Task Classification Method
+# ============================================================================
+# The framework uses all-MiniLM-L6-v2 for embeddings (semantic similarity)
+# For task classification, you can choose:
+#   - keyword_matching: Fast, local, no API needed (DEFAULT)
+#   - auto_llm: Uses LLM API for more accurate classification (requires API key)
+
+USE_LLM_CLASSIFICATION = True  # Set to True only if you want LLM-based classification
+
+# Set your API key here or as environment variable (only needed if USE_LLM_CLASSIFICATION=True)
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", None)
+
+# Initialize LLM client if enabled
+llm_client = None
+if USE_LLM_CLASSIFICATION and OPENAI_API_KEY:
+    try:
+        from examples.llm_integration import OpenAIClient
+        llm_client = OpenAIClient(OPENAI_API_KEY)
+        print("✓ LLM-based task classification enabled")
+    except Exception as e:
+        print(f"⚠️  Failed to initialize LLM client: {e}")
+        print("   Falling back to keyword-based classification")
+        USE_LLM_CLASSIFICATION = False
+else:
+    print("ℹ️  Using local models only (all-MiniLM-L6-v2 for embeddings, keyword matching for classification)")
 
 
 def demo_basic_usage():
@@ -19,15 +47,20 @@ def demo_basic_usage():
         scope=MemoryScope.SESSION
     )
     
+    # the above content "I'm working on a Python web application using FastAPI." is stored in episodic memory
+    # the below content "User prefers Python for backend development." is stored in semantic memory
+    # needs to extract the key information from the content and store it in semantic memory
+    # TODO: this is not solved yet. 
     memory.store_semantic(
         entity="user_preference",
         content="User prefers Python for backend development.",
         scope=MemoryScope.GLOBAL
     )
     
+    # Task type is automatically classified from the query
     result = memory.retrieve(
-        query="What programming language should I use?",
-        task_type="recommendation"
+        query="What programming language should I use?"
+        # auto_classify=True by default - detects this as "recommendation"
     )
     
     print(f"\nQuery: What programming language should I use?")
@@ -40,50 +73,93 @@ def demo_basic_usage():
     print(f"Strategy: {result.strategy_used}")
 
 
-def demo_customer_support():
+def demo_customer_support(use_llm_classification=False, llm_client=None):
     """Real-world: Customer support with context isolation"""
     print("\n" + "=" * 60)
     print("DEMO 2: Customer Support with Context Isolation")
+    if use_llm_classification:
+        print("(Using LLM-based task classification)")
+    else:
+        print("(Using keyword-based task classification)")
     print("=" * 60)
     
-    memory = AgenticMemory()
+    # Initialize with appropriate classification method
+    if use_llm_classification and llm_client:
+        memory = AgenticMemory(
+            task_classification_method="auto_llm",
+            llm_client=llm_client
+        )
+    else:
+        memory = AgenticMemory(
+            task_classification_method="keyword_matching"
+        )
     
-    memory.create_isolated_context("customer_alice", MemoryScope.SESSION)
-    memory.create_isolated_context("customer_bob", MemoryScope.SESSION)
-    
+    # Store customer-specific memories with tags for filtering
     memory.store_episodic(
         source="customer_alice",
         content="Alice reported that she cannot access her account. Email: alice@example.com. Issue: Forgot password.",
         scope=MemoryScope.SESSION,
-        tags=["customer_alice", "account_access"]
+        tags=["customer_alice", "account_access"],
+        metadata={"customer_id": "customer_alice"}
     )
     
     memory.store_episodic(
         source="customer_bob",
         content="Bob is experiencing slow page load times. Browser: Chrome. Location: US-West.",
         scope=MemoryScope.SESSION,
-        tags=["customer_bob", "performance"]
+        tags=["customer_bob", "performance"],
+        metadata={"customer_id": "customer_bob"}
     )
     
     print("\n--- Agent handling Alice's query ---")
+    alice_query = "What is the customer's issue with account access?"
+    
+    # Let auto-classification determine the task type
     result_alice = memory.retrieve(
-        query="What is the customer's issue?",
-        context_id="customer_alice",
-        scope=MemoryScope.SESSION
+        query=alice_query,
+        # No task_type specified - auto-classification will determine it
+        scope=MemoryScope.SESSION,
+        top_k=10
     )
     
-    print(f"Retrieved for Alice: {result_alice.memories[0].content}")
+    # Show what task type was auto-classified
+    auto_task_type = result_alice.metadata.get("auto_classified_task_type", "unknown")
+    print(f"Query: '{alice_query}'")
+    print(f"Auto-classified as: {auto_task_type}")
+    
+    # Filter by customer tag
+    alice_memories = [m for m in result_alice.memories if "customer_alice" in m.tags]
+    
+    if alice_memories:
+        print(f"Retrieved for Alice: {alice_memories[0].content}")
+    else:
+        print(f"No memories found for Alice (retrieved {len(result_alice.memories)} total)")
     
     print("\n--- Agent handling Bob's query ---")
+    bob_query = "What is the customer's issue with slow page loads?"
+    
+    # Let auto-classification determine the task type
     result_bob = memory.retrieve(
-        query="What is the customer's issue?",
-        context_id="customer_bob",
-        scope=MemoryScope.SESSION
+        query=bob_query,
+        # No task_type specified - auto-classification will determine it
+        scope=MemoryScope.SESSION,
+        top_k=10
     )
     
-    print(f"Retrieved for Bob: {result_bob.memories[0].content}")
+    # Show what task type was auto-classified
+    auto_task_type = result_bob.metadata.get("auto_classified_task_type", "unknown")
+    print(f"Query: '{bob_query}'")
+    print(f"Auto-classified as: {auto_task_type}")
     
-    print("\n✓ Context isolation prevents mixing customer data")
+    # Filter by customer tag
+    bob_memories = [m for m in result_bob.memories if "customer_bob" in m.tags]
+    
+    if bob_memories:
+        print(f"Retrieved for Bob: {bob_memories[0].content}")
+    else:
+        print(f"No memories found for Bob (retrieved {len(result_bob.memories)} total)")
+    
+    print("\n✓ Context isolation using tags prevents mixing customer data")
 
 
 def demo_code_assistant():
@@ -373,7 +449,7 @@ def main():
     """Run all demonstrations"""
     demos = [
         demo_basic_usage,
-        demo_customer_support,
+        lambda: demo_customer_support(USE_LLM_CLASSIFICATION, llm_client),
         demo_code_assistant,
         demo_context_distraction,
         demo_conflict_resolution,
@@ -386,7 +462,7 @@ def main():
         try:
             demo()
         except Exception as e:
-            print(f"\n❌ Error in {demo.__name__}: {e}")
+            print(f"\n❌ Error in {demo.__name__ if hasattr(demo, '__name__') else 'demo'}: {e}")
             import traceback
             traceback.print_exc()
     
