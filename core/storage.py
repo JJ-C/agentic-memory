@@ -16,6 +16,20 @@ class MemoryStore:
         self.scope_index: Dict[MemoryScope, List[str]] = defaultdict(list)
         self.type_index: Dict[MemoryType, List[str]] = defaultdict(list)
         self.tag_index: Dict[str, List[str]] = defaultdict(list)
+        
+        # Scope hierarchy for access control
+        self.scope_hierarchy = {
+            MemoryScope.GLOBAL: [],
+            MemoryScope.PROJECT: [MemoryScope.GLOBAL],
+            MemoryScope.SESSION: [MemoryScope.GLOBAL, MemoryScope.PROJECT],
+            MemoryScope.TASK: [MemoryScope.GLOBAL, MemoryScope.PROJECT, MemoryScope.SESSION]
+        }
+    
+    def _get_accessible_scopes(self, current_scope: MemoryScope) -> List[MemoryScope]:
+        """Get all scopes accessible from the current scope (including inherited)"""
+        accessible = [current_scope]
+        accessible.extend(self.scope_hierarchy.get(current_scope, []))
+        return accessible
     
     def store(self, 
               content: str,
@@ -107,7 +121,9 @@ class MemoryStore:
         candidate_memories = list(self.memories.values())
         
         if scope:
-            candidate_memories = [m for m in candidate_memories if m.scope == scope]
+            # Respect scope hierarchy: include current scope and all inherited scopes
+            accessible_scopes = self._get_accessible_scopes(scope)
+            candidate_memories = [m for m in candidate_memories if m.scope in accessible_scopes]
         
         if memory_types:
             candidate_memories = [m for m in candidate_memories if m.type in memory_types]
