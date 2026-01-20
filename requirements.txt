@@ -1,0 +1,14 @@
+numpy>=1.24.0,<2.0.0
+sentence-transformers>=2.2.0,<3.0.0
+pydantic>=2.0.0,<3.0.0
+python-dateutil>=2.8.0
+pytest>=7.4.0
+
+# Optional: LLM integrations
+# Uncomment the ones you need:
+# openai>=1.0.0                    # For ChatGPT/GPT-4
+# google-generativeai>=0.3.0       # For Google Gemini
+# anthropic>=0.7.0                 # For Claude
+
+# Optional: Vector database persistence
+# chromadb>=0.4.22
