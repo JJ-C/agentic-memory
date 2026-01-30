@@ -112,6 +112,9 @@ memory_exports/
 *.sqlite
 *.sqlite3
 
+# Cassandra vector database storage
+cassandra_data/
+
 # Documentation builds
 docs/_build/
 site/

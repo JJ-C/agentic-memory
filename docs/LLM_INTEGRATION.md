@@ -7,7 +7,8 @@ This guide shows how to integrate the Agentic Memory Framework with Large Langua
 ## Supported LLMs
 
 - ✅ **OpenAI** (ChatGPT, GPT-4, GPT-3.5)
-- ✅ **Google Gemini** (Gemini Pro)
+- ✅ **Google Gemini** (Gemini 1.5 Flash)
+- ✅ **Local Models** (Ollama/Llama 3)
 - 🔄 **Anthropic Claude** (easily adaptable)
 - 🔄 **Other LLMs** (any API-based LLM)
 
@@ -19,13 +20,14 @@ pip install -r requirements.txt
 
 # Install LLM libraries
 pip install openai                    # For OpenAI/ChatGPT
-pip install google-generativeai       # For Google Gemini
+pip install google-genai              # For Google Gemini
+pip install ollama                    # For Local Models (Ollama)
 pip install anthropic                 # For Claude (optional)
 ```
 
 ## Quick Start
 
-### 1. Set API Keys
+### 1. Set API Keys (for Cloud LLMs)
 
 ```bash
 # Option 1: Environment variables (recommended)
@@ -37,14 +39,24 @@ OPENAI_API_KEY = "your-key-here"
 GOOGLE_API_KEY = "your-key-here"
 ```
 
-### 2. Create Memory-Enhanced Agent
+### 2. Set Up Local LLM (Ollama)
+
+1.  **Install Ollama** from [ollama.com](https://ollam  a.com)
+2.  **Start Ollama server**: `ollama serve`
+3.  **Pull a model** (e.g., Llama 3): `ollama pull llama3`
+
+### 3. Create Memory-Enhanced Agent
 
 ```python
-from examples.llm_integration import MemoryEnhancedAgent, OpenAIClient
+from examples.llm_integration import MemoryEnhancedAgent, OpenAIClient, OllamaClient
 from agentic_memory import AgenticMemory
 
-# Initialize
+# Initialize Cloud Agent
 llm = OpenAIClient(api_key="your-key")
+
+# OR Initialize Local Agent
+# llm = OllamaClient(base_url="http://localhost:11434")
+
 memory = AgenticMemory()
 agent = MemoryEnhancedAgent(llm, memory, user_id="user_123")
 

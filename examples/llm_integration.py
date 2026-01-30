@@ -12,6 +12,7 @@ import sys
 sys.path.insert(0, '/Users/jchen65/dev/ai_playground/agentic_memory')
 
 import os
+import time
 from typing import List, Dict
 from agentic_memory import AgenticMemory, MemoryType, MemoryScope
 
@@ -68,35 +69,49 @@ class OpenAIClient:
 
 
 class GeminiClient:
-    """Wrapper for Google Gemini API"""
+    """Wrapper for Google Gemini API (using google-genai SDK)"""
     
     def __init__(self, api_key: str):
         self.api_key = api_key
-        self.model = None
+        self.client = None
         self._initialize()
     
     def _initialize(self):
         try:
-            import google.generativeai as genai
-            genai.configure(api_key=self.api_key)
-            self.model = genai.GenerativeModel('gemini-pro')
+            from google import genai
+            self.client = genai.Client(api_key=self.api_key)
         except ImportError:
-            print("⚠️  Google Generative AI library not installed. Run: pip install google-generativeai")
+            print("⚠️  Google GenAI library not installed. Run: pip install google-genai")
         except Exception as e:
             print(f"⚠️  Failed to initialize Gemini: {e}")
     
     def generate(self, messages: List[Dict[str, str]]) -> str:
-        """Generate response from Gemini"""
-        if not self.model:
-            return "Gemini client not initialized. Please install google-generativeai library."
+        """Generate response from Gemini with retry logic"""
+        if not self.client:
+            return "Gemini client not initialized. Please install google-genai library."
         
-        try:
-            # Convert messages to Gemini format
-            prompt = self._format_messages(messages)
-            response = self.model.generate_content(prompt)
-            return response.text
-        except Exception as e:
-            return f"Error calling Gemini: {e}"
+        max_retries = 3
+        base_delay = 2
+        
+        for attempt in range(max_retries):
+            try:
+                # Convert messages to Gemini format
+                prompt = self._format_messages(messages)
+                response = self.client.models.generate_content(
+                    model='gemini-1.5-flash',
+                    contents=prompt
+                )
+                return response.text
+            except Exception as e:
+                error_str = str(e)
+                if "429" in error_str and attempt < max_retries - 1:
+                    wait_time = base_delay * (2 ** attempt)
+                    print(f"⚠️  Rate limit hit. Retrying in {wait_time}s...")
+                    time.sleep(wait_time)
+                    continue
+                return f"Error calling Gemini: {e}"
+        
+        return "Error: Maximum retries exceeded for Gemini API."
     
     def _format_messages(self, messages: List[Dict[str, str]]) -> str:
         """Convert OpenAI-style messages to Gemini prompt"""
@@ -111,6 +126,40 @@ class GeminiClient:
             elif role == 'assistant':
                 formatted.append(f"Assistant: {content}")
         return "\n\n".join(formatted)
+
+
+class OllamaClient:
+    """Wrapper for Ollama (Local LLM)"""
+    
+    def __init__(self, base_url: str = "http://localhost:11434"):
+        self.base_url = base_url
+        self.client = None
+        self._initialize()
+    
+    def _initialize(self):
+        try:
+            from ollama import Client
+            self.client = Client(host=self.base_url)
+        except ImportError:
+            print("⚠️  Ollama library not installed. Run: pip install ollama")
+        except Exception as e:
+            print(f"⚠️  Failed to initialize Ollama: {e}")
+    
+    def generate(self, messages: List[Dict[str, str]], model: str = "gpt-oss:20b") -> str:
+        """Generate response from local Ollama model"""
+        if not self.client:
+            return "Ollama client not initialized. Please install ollama library."
+        
+        try:
+            response = self.client.chat(
+                model=model,
+                messages=messages
+            )
+            return response['message']['content']
+        except Exception as e:
+            if "connection refused" in str(e).lower():
+                return "Error: Ollama is not running. Please start it with 'ollama serve'"
+            return f"Error calling Ollama: {e}"
 
 
 # ============================================================================
@@ -140,6 +189,7 @@ class MemoryEnhancedAgent:
             context_id=self.user_id,
             max_tokens=1500
         )
+        #print(f"INFO: memory_result = {memory_result}")
         
         # 2. Build context from memories
         context_parts = []
@@ -473,6 +523,53 @@ def demo_gemini_conflict_resolution():
     print("✅ Agent uses most recent preference (Vue), resolving conflict!")
 
 
+def demo_ollama_local():
+    """Demo: Running locally with Ollama (Llama 3)"""
+    print("\n" + "=" * 70)
+    print("DEMO 7: Local Agent with Ollama (Llama 3)")
+    print("=" * 70)
+    
+    # Initialize
+    # Ensure you have Ollama running: `ollama serve`
+    # And have pulled the model: `ollama pull llama3`
+    llm = OllamaClient()
+    memory = AgenticMemory()
+    agent = MemoryEnhancedAgent(llm, memory, user_id="local_user")
+    
+    print("\n🦙 Starting local conversation with Llama 3...\n")
+    
+    # Check if Ollama is accessible
+    test_response = llm.generate([{"role": "user", "content": "hi"}])
+    if "Error" in test_response:
+        print(f"❌ {test_response}")
+        print("Please ensure Ollama is installed and running:")
+        print("1. Install Ollama: https://ollama.com")
+        print("2. Run: ollama serve")
+        print("3. Pull model: ollama pull llama3")
+        return
+
+    # Conversation 1
+    print("👤 User: I'm planning a hiking trip to Yosemite.")
+    response = agent.chat("I'm planning a hiking trip to Yosemite.")
+    print(f"🤖 Agent: {response}\n")
+    
+    agent.remember_fact("User is planning a hiking trip to Yosemite")
+    
+    # Conversation 2
+    print("👤 User: I'm a beginner hiker, so nothing too strenuous.")
+    response = agent.chat("I'm a beginner hiker, so nothing too strenuous.")
+    print(f"🤖 Agent: {response}\n")
+    
+    agent.remember_preference("User is a beginner hiker, prefers easy trails")
+    
+    # Conversation 3 (Recall)
+    print("👤 User: What trails should I look at?")
+    response = agent.chat("What trails should I look at?", task_type="recommendation")
+    print(f"🤖 Agent: {response}\n")
+    
+    print("✅ Local agent successfully used memory for recommendations!")
+
+
 # ============================================================================
 # MAIN
 # ============================================================================
@@ -487,14 +584,6 @@ def main():
     print("\n📝 Configuration:")
     print(f"   OpenAI API Key: {'✓ Set' if OPENAI_API_KEY != 'your-openai-api-key-here' else '✗ Not set'}")
     print(f"   Google API Key: {'✓ Set' if GOOGLE_API_KEY != 'your-google-api-key-here' else '✗ Not set'}")
-    
-    if OPENAI_API_KEY == "your-openai-api-key-here" and GOOGLE_API_KEY == "your-google-api-key-here":
-        print("\n⚠️  Please set your API keys before running demos!")
-        print("\nOption 1: Set environment variables:")
-        print("   export OPENAI_API_KEY='your-key'")
-        print("   export GOOGLE_API_KEY='your-key'")
-        print("\nOption 2: Edit this file and set the keys directly")
-        return
     
     demos = []
     
@@ -513,6 +602,17 @@ def main():
             ("Gemini Customer Support", demo_gemini_customer_support),
             ("Gemini Conflict Resolution", demo_gemini_conflict_resolution),
         ])
+        
+    # Always add local demo (checks for Ollama availability inside)
+    demos.append(("Local Ollama (Llama 3)", demo_ollama_local))
+    
+    if not demos:
+        print("\n⚠️  No API keys set and no demos selected.")
+        print("\nOption 1: Set environment variables:")
+        print("   export OPENAI_API_KEY='your-key'")
+        print("   export GOOGLE_API_KEY='your-key'")
+        print("\nOption 2: Run local demo (requires Ollama)")
+        return
     
     # Run demos
     for name, demo_func in demos:

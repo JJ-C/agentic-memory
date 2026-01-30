@@ -10,24 +10,31 @@ import sys
 sys.path.insert(0, '/Users/jchen65/dev/ai_playground/agentic_memory')
 
 from agentic_memory import AgenticMemory, MemoryType, MemoryScope
+import os
 
 
-# Mock Mem0 interface (install with: pip install mem0ai)
-# Uncomment below if you have mem0ai installed:
-"""
-from mem0 import Memory
+# Mem0 Setup - Set USE_REAL_MEM0=true to use actual Mem0 with local Cassandra
+USE_REAL_MEM0 = os.getenv('USE_REAL_MEM0', 'false').lower() == 'true'
 
-mem0_config = {
-    "vector_store": {
-        "provider": "qdrant",
-        "config": {
-            "host": "localhost",
-            "port": 6333,
-        }
-    }
-}
-mem0 = Memory.from_config(mem0_config)
-"""
+if USE_REAL_MEM0:
+    try:
+        from mem0 import Memory
+        from mem0_config import get_mem0_config_with_env
+        
+        mem0_config = get_mem0_config_with_env()
+        mem0_client = Memory.from_config(mem0_config)
+        print("✓ Using real Mem0 with local Cassandra")
+    except ImportError as e:
+        print(f"⚠ Mem0 not installed: {e}")
+        print("  Run: pip install mem0ai cassandra-driver")
+        mem0_client = None
+    except Exception as e:
+        print(f"⚠ Failed to initialize Mem0: {e}")
+        print("  Make sure Cassandra is running: docker-compose up -d")
+        mem0_client = None
+else:
+    mem0_client = None
+    print("ℹ Using mock mode (set USE_REAL_MEM0=true for real Mem0)")
 
 
 class Mem0AgenticBridge:
@@ -156,13 +163,13 @@ class Mem0AgenticBridge:
 
 
 def demo_basic_integration():
-    """Basic integration demo without actual Mem0"""
+    """Basic integration demo with optional real Mem0"""
     print("=" * 70)
     print("DEMO: Mem0 + Agentic Memory Integration")
     print("=" * 70)
     
     agentic = AgenticMemory()
-    bridge = Mem0AgenticBridge(agentic, mem0_client=None)
+    bridge = Mem0AgenticBridge(agentic, mem0_client=mem0_client)
     
     print("\n1️⃣  Adding conversation (automatic extraction simulated)...")
     
@@ -427,10 +434,10 @@ def main():
     print("   • Together: Best of both worlds")
     
     print("\n🚀 To use with real Mem0:")
-    print("   1. pip install mem0ai")
-    print("   2. Uncomment Mem0 initialization in this file")
-    print("   3. Configure your vector store (Qdrant, Pinecone, etc.)")
-    print("   4. Run: python examples/mem0_integration.py")
+    print("   1. Install dependencies: pip install mem0ai qdrant-client")
+    print("   2. Start Qdrant: docker-compose up -d")
+    print("   3. Run with real Mem0: USE_REAL_MEM0=true python examples/mem0_integration.py")
+    print("   4. Optional: Set LLM provider via MEM0_LLM_PROVIDER and MEM0_LLM_API_KEY")
 
 
 if __name__ == "__main__":

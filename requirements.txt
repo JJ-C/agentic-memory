@@ -1,14 +1,20 @@
 numpy>=2.0.0,<3.0.0
 sentence-transformers>=2.2.0,<3.0.0
-pydantic>=2.0.0,<3.0.0
+pydantic==2.10.6
 python-dateutil>=2.8.0
 pytest>=7.4.0
 
 # Optional: LLM integrations
 # Uncomment the ones you need:
 # openai>=1.0.0                    # For ChatGPT/GPT-4
-# google-generativeai>=0.3.0       # For Google Gemini
+google-genai>=0.3.0              # For Google Gemini (New)
 # anthropic>=0.7.0                 # For Claude
+ollama>=0.1.0                    # For Local Models (Ollama)
 
 # Optional: Vector database persistence
 # chromadb>=0.4.22
+
+# Mem0 integration
+# Note: Cassandra support added in v1.0.2 (PR #3578)
+mem0ai>=1.0.2
+cassandra-driver>=3.28.0
